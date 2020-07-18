@@ -13,14 +13,16 @@ with open('ncfp.cfg') as cfg_file:
                 base = float(parse[-1])
             if 'depth' == parse[0]:
                 depth = float(parse[-1])
-            if 'limit' == parse[0]:
-                limit = float(parse[-1])
+            if 'radius_pt' == parse[0]:
+                radius_pt = float(parse[-1])
+            if 'near_clip' == parse[0]:
+                near_clip = float(parse[-1])
+            if 'radius_min' == parse[0]:
+                radius_min = float(parse[-1])
 
 decay = lambda dist: base ** (dist / depth)
 cross_sec = lambda r: (2. * r - 3.) * r ** 2 + 1.
-
-def radius_dist(dist):
-    return radius
+radius_dist = lambda dist, camera: radius_pt * camera[0, 0] / dist
 
 def pinhole(f, px=(_width)/2., py=(_height)/2.):
     return array((
@@ -57,9 +59,9 @@ class board(object):
                 y += dy
             r = ((x - x0) ** 2 + (y - y0) ** 2) ** 0.5
     
-    def draw(self, x0, y0, dist, color, alpha):
-        dist = max(dist, limit)
-        radius = radius_dist(dist)
+    def draw(self, x0, y0, dist, color, alpha, camera):
+        dist = max(dist, near_clip)
+        radius = max(radius_dist(dist, camera), radius_min)
         x0i = int(x0)
         y0i = int(y0)
         x0 -= 0.5
@@ -76,7 +78,7 @@ class board(object):
             x0 = v[0] / v[2]
             y0 = v[1] / v[2]
             if 0. <= x0 < self.width and 0. <= y0 < self.height:
-                self.draw(x0, y0, v_cam.dot(v_cam)**0.5, pt[3:6], pt[6])
+                self.draw(x0, y0, v_cam.dot(v_cam)**0.5, pt[3:6], pt[6], camera)
     
     def proj(self, cloud, center, quat, camera):
         for pt in cloud:
