@@ -4,7 +4,7 @@ from scipy.spatial.transform import Rotation
 with open('ncfp.cfg') as cfg_file:
     for cfg in cfg_file:
         parse = cfg.split()
-        if parse:
+        if 2 == len(parse):
             if '_width' == parse[0]:
                 _width = int(parse[-1])
             if '_height' == parse[0]:
@@ -19,12 +19,14 @@ with open('ncfp.cfg') as cfg_file:
                 near_clip = float(parse[-1])
             if 'radius_min' == parse[0]:
                 radius_min = float(parse[-1])
+            if 'fields' == parse[0]:
+                fields = int(parse[-1])
 
 decay = lambda dist: base ** (dist / depth)
 cross_sec = lambda r: (2. * r - 3.) * r ** 2 + 1.
 radius_dist = lambda dist, camera: radius_pt * camera[0, 0] / dist
 
-def pinhole(f, px=(_width)/2., py=(_height)/2.):
+def pinhole(f=_width/2., px=_width/2., py=_height/2.):
     return array((
         (f, 0., px),
         (0., f, py),
@@ -35,10 +37,17 @@ class board(object):
     def __init__(self, width=_width, height=_height, dtype=float):
         self.width = width = int(width)
         self.height = height = int(height)
-        self.data = zeros((height, width, 5), dtype)
+        self.data = zeros((height, width, fields + 1), dtype)
     
     def __iadd__(self, value):
         self.data += value.data
+    
+    def __str__(self):
+        return ''.join(map(
+            chr,
+            map(
+                round,
+                (self.data[:, :, :3] / self.data[:, :, -1:]).flatten() * 255)))
     
     def draw_pix(self, x, y, r, dist, color, alpha):
         weight = alpha * decay(dist) * cross_sec(r)
