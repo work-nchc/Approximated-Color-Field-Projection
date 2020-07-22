@@ -9,8 +9,8 @@ with open('ncfp.cfg') as cfg_file:
                 _width = int(parse[-1])
             if '_height' == parse[0]:
                 _height = int(parse[-1])
-            if 'fields' == parse[0]:
-                fields = int(parse[-1])
+            if '_fields' == parse[0]:
+                _fields = int(parse[-1])
             if 'base' == parse[0]:
                 base = float(parse[-1])
             if 'depth' == parse[0]:
@@ -37,23 +37,26 @@ def pinhole(f=_width/2., px=_width/2., py=_height/2.):
 
 class board(object):
     
-    def __init__(self, width=_width, height=_height, dtype=float):
-        self.width = width = int(width)
-        self.height = height = int(height)
-        self.data = zeros((height, width, fields + 1), dtype)
+    def __init__(
+        self, width=_width, height=_height, fields=_fields, dtype=float
+    ):
+        self.width = width = max(int(width), 1)
+        self.height = height = max(int(height), 1)
+        self.fields = fields = max(int(fields), 0)
+        self.data = zeros((height, width, fields + 2), dtype)
     
     def __iadd__(self, value):
         self.data += value.data
     
     def __str__(self):
         return (
-            self.data[:, :, :3] / self.data[:, :, -1:] * color_max
+            self.data[:, :, :fields] / self.data[:, :, -1:] * color_max
         ).astype('uint8').tobytes()
     
     def draw_pix(self, x, y, r, dist, color, alpha):
         weight = alpha * decay(dist) * cross_sec(r)
-        self.data[y, x, :3] += color * weight
-        self.data[y, x, 3] += dist * weight
+        self.data[y, x, :fields] += color * weight
+        self.data[y, x, fields] += dist * weight
         self.data[y, x, -1] += weight
     
     def draw_quad(self, xi, yi, dx, dy, x0, y0, radius, dist, color, alpha):
@@ -88,7 +91,9 @@ class board(object):
             x0 = v[0] / v[2]
             y0 = v[1] / v[2]
             if 0. <= x0 < self.width and 0. <= y0 < self.height:
-                self.draw(x0, y0, v_cam.dot(v_cam)**0.5, pt[3:6], pt[6], camera)
+                self.draw(
+                    x0, y0, v_cam.dot(v_cam)**0.5, pt[3:fields+3], pt[-1],
+                    camera)
     
     def proj(self, cloud, center, quat, camera):
         for pt in cloud:
