@@ -9,6 +9,8 @@ with open('ncfp.cfg') as cfg_file:
                 _width = int(parse[-1])
             if '_height' == parse[0]:
                 _height = int(parse[-1])
+            if 'fields' == parse[0]:
+                fields = int(parse[-1])
             if 'base' == parse[0]:
                 base = float(parse[-1])
             if 'depth' == parse[0]:
@@ -19,8 +21,8 @@ with open('ncfp.cfg') as cfg_file:
                 near_clip = float(parse[-1])
             if 'radius_min' == parse[0]:
                 radius_min = float(parse[-1])
-            if 'fields' == parse[0]:
-                fields = int(parse[-1])
+            if 'color_max' == parse[0]:
+                color_max = float(parse[-1])
 
 decay = lambda dist: base ** (dist / depth)
 cross_sec = lambda r: (2. * r - 3.) * r ** 2 + 1.
@@ -30,7 +32,8 @@ def pinhole(f=_width/2., px=_width/2., py=_height/2.):
     return array((
         (f, 0., px),
         (0., f, py),
-        (0., 0., 1.)))
+        (0., 0., 1.)
+    ))
 
 class board(object):
     
@@ -43,11 +46,9 @@ class board(object):
         self.data += value.data
     
     def __str__(self):
-        return ''.join(map(
-            chr,
-            map(
-                round,
-                (self.data[:, :, :3] / self.data[:, :, -1:]).flatten() * 255)))
+        return (
+            self.data[:, :, :3] / self.data[:, :, -1:] * color_max
+        ).astype('uint8').tobytes()
     
     def draw_pix(self, x, y, r, dist, color, alpha):
         weight = alpha * decay(dist) * cross_sec(r)
