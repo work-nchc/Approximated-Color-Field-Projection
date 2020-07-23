@@ -50,13 +50,13 @@ class board(object):
     
     def __bytes__(self):
         return (
-            self.data[:, :, :fields] / self.data[:, :, -1:] * color_max
+            self.data[:, :, :self.fields] / self.data[:, :, -1:] * color_max
         ).astype('uint8').tobytes()
     
     def draw_pix(self, x, y, r, dist, color, alpha):
         weight = alpha * decay(dist) * cross_sec(r)
-        self.data[y, x, :fields] += color * weight
-        self.data[y, x, fields] += dist * weight
+        self.data[y, x, :self.fields] += color * weight
+        self.data[y, x, self.fields] += dist * weight
         self.data[y, x, -1] += weight
     
     def draw_quad(self, xi, yi, dx, dy, x0, y0, radius, dist, color, alpha):
@@ -92,13 +92,12 @@ class board(object):
             y0 = v[1] / v[2]
             if 0. <= x0 < self.width and 0. <= y0 < self.height:
                 self.draw(
-                    x0, y0, (v_cam @ v_cam) ** 0.5, pt[3:fields+3], pt[-1],
+                    x0, y0, (v_cam @ v_cam) ** 0.5, pt[3:self.fields+3], pt[-1],
                     camera)
     
     def proj(self, cloud, center, quat, camera):
-        for pt in cloud:
-            self.proj_pt(pt, center, quat, camera)
+        (self.proj_pt(pt, center, quat, camera) for pt in cloud}
     
     def proj_o3d(self, cloud, center, quat, camera):
-        for pt in zip(cloud.points, cloud.colors):
-            self.proj_pt(concatenate((*pt, array((1.,)))), center, quat, camera)
+        {self.proj_pt(concatenate((*pt, array((1.,)))), center, quat, camera)
+         for pt in zip(cloud.points, cloud.colors)}
