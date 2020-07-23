@@ -1,4 +1,4 @@
-from numpy import zeros, array
+from numpy import zeros, array, concatenate
 from scipy.spatial.transform import Rotation
 
 with open('ncfp.cfg') as cfg_file:
@@ -48,7 +48,7 @@ class board(object):
     def __iadd__(self, value):
         self.data += value.data
     
-    def __str__(self):
+    def __bytes__(self):
         return (
             self.data[:, :, :fields] / self.data[:, :, -1:] * color_max
         ).astype('uint8').tobytes()
@@ -87,14 +87,18 @@ class board(object):
     def proj_pt(self, pt, center, quat, camera):
         v_cam = Rotation(quat).apply(pt[:3] - center)
         if 0. < v_cam[2]:
-            v = camera.dot(v_cam)
+            v = camera @ v_cam
             x0 = v[0] / v[2]
             y0 = v[1] / v[2]
             if 0. <= x0 < self.width and 0. <= y0 < self.height:
                 self.draw(
-                    x0, y0, v_cam.dot(v_cam)**0.5, pt[3:fields+3], pt[-1],
+                    x0, y0, (v_cam @ v_cam) ** 0.5, pt[3:fields+3], pt[-1],
                     camera)
     
     def proj(self, cloud, center, quat, camera):
         for pt in cloud:
             self.proj_pt(pt, center, quat, camera)
+    
+    def proj_o3d(self, cloud, center, quat, camera):
+        for pt in zip(cloud.points, cloud.colors):
+            self.proj_pt(concatenate((*pt, array((1.,)))), center, quat, camera)
