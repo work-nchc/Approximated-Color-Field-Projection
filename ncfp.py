@@ -96,7 +96,7 @@ class board(object):
                     camera)
     
     def proj(self, cloud, center, quat, camera):
-        (self.proj_pt(pt, center, quat, camera) for pt in cloud}
+        {self.proj_pt(pt, center, quat, camera) for pt in cloud}
     
     def proj_o3d(self, cloud, center, quat, camera):
         {self.proj_pt(concatenate((*pt, array((1.,)))), center, quat, camera)
