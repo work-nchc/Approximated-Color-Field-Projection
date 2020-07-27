@@ -30,7 +30,7 @@ cross_sec = lambda r: (2. * r - 3.) * r ** 2 + 1.
 
 def pinhole(f=_width/2., px=_width/2., py=_height/2.):
     return array((
-        (f, 0., px),
+        (-f, 0., px),
         (0., f, py),
         (0., 0., 1.)
     ))
@@ -92,7 +92,7 @@ class board(object):
         v_cam = Rotation(quat).apply(pt[:3] - center, True)
         if 0. < v_cam[2]:
             v = camera @ v_cam
-            x0 = -v[0] / v[2]
+            x0 = v[0] / v[2]
             y0 = v[1] / v[2]
             if 0. <= x0 < self.width and 0. <= y0 < self.height:
                 self.draw(
