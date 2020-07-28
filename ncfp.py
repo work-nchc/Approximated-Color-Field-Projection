@@ -12,8 +12,8 @@ with open('ncfp.cfg') as cfg_file:
                 _height = int(parse[-1])
             if '_fields' == parse[0]:
                 _fields = int(parse[-1])
-            if 'exponent' == parse[0]:
-                exponent = int(parse[-1])
+            if 'exponent_decay' == parse[0]:
+                exponent_decay = int(parse[-1])
             if 'near_clip' == parse[0]:
                 near_clip = float(parse[-1])
             if 'radius_min' == parse[0]:
@@ -39,21 +39,22 @@ class board(object):
         self.height = height = max(int(height), 1)
         self.fields = fields = max(int(fields), 0)
         self.data = zeros((height, width, fields + 2), dtype)
-        self.data[:, :, -1].fill(float_info.min)
     
     def __iadd__(self, value):
         self.data += value.data
     
     def image(self):
         return (
-            self.data[:, :, :self.fields] / self.data[:, :, -1:] * color_max
+            self.data[:, :, :self.fields] /
+            (self.data[:, :, -1:] + float_info.min) *
+            color_max
         ).astype('uint8')
     
     def __bytes__(self):
         return self.image().tobytes()
     
     def draw_pix(self, x, y, r, dist, color, alpha):
-        weight = alpha * cross_sec(r) * dist ** exponent
+        weight = alpha * cross_sec(r) * dist ** exponent_decay
         self.data[y, x, :self.fields] += color * weight
         self.data[y, x, self.fields] += dist * weight
         self.data[y, x, -1] += weight
