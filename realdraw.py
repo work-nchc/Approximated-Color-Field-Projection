@@ -1,34 +1,27 @@
 from open3d import io
 from ncfp import board, pinhole
-from numpy import array, save
+from numpy import array, ones
 from pyglet.window import Window
 from pyglet.image import ImageData
 from pyglet.app import run
-from time import time
 
-t = time()
 cloud = io.read_point_cloud('test.ply')
-print(time() - t, 0)
 print(cloud)
-
+array_cloud = ones((len(cloud.points), 7))
+array_cloud[:, :3] = cloud.points
+array_cloud[:, 3:6] = cloud.colors
 board_hd = board()
-#center = array((400., 1100., 400.))
-#quat = array((1., 0., 0., 0.))
-center = array((475., 1100., 50.))
-#center = array((475., 1040., 50.))
-quat = array((0.70710678, 0., 0., 0.70710678))
 
-t = time()
-board_hd.proj_o3d(cloud, center, quat, pinhole(), 0.08)
-print(time() - t, 1)
+center = array((475., 1100., 50.))
+quat = array((0.70710678, 0., 0., 0.70710678))
+radius_pt = 0.08
+n_jobs = 10
+
+board_hd.multi_proj(array_cloud, center, quat, pinhole(), radius_pt, n_jobs)
+image = ImageData(board_hd.width, board_hd.height, 'RGB', bytes(board_hd))
+image.save('test.png')
 
 window = Window(fullscreen=True)
-
-t = time()
-image = ImageData(board_hd.width, board_hd.height, 'RGB', bytes(board_hd))
-print(time() - t, 2)
-
-image.save('test.png')
 
 @window.event
 def on_draw():
