@@ -17,7 +17,7 @@ quat = array((0.70710678, 0., 0., 0.70710678))
 radius_pt = 0.08
 n_jobs = 10
 
-board_hd.multi_proj(array_cloud, center, quat, pinhole(), radius_pt, n_jobs)
+board_hd.multi_proj(n_jobs, array_cloud, center, quat, pinhole(), radius_pt)
 image = ImageData(board_hd.width, board_hd.height, 'RGB', bytes(board_hd))
 image.save('test.png')
 
