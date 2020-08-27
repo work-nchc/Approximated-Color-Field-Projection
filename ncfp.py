@@ -1,4 +1,4 @@
-from numpy import zeros, array, concatenate, log2, seterr, fmax, where
+from numpy import zeros, full, array, concatenate, log2, seterr, fmax, where
 from scipy.spatial.transform import Rotation
 from sys import float_info
 from joblib import Parallel, delayed
@@ -33,17 +33,21 @@ class board(object):
         far_clip=float('inf'), radius_min=0.8, radius_max=float('inf'),
         *args, **kwargs
     ):
-        self.width = width = max(int(width), 1)
-        self.height = height = max(int(height), 1)
-        self.fields = fields = max(int(fields), 0)
+        self.width = max(int(width), 1)
+        self.height = max(int(height), 1)
+        self.fields = max(int(fields), 0)
         self.dtype = dtype
-        self.data = zeros((height, width, fields + 2), dtype)
-        self.back_weight = max(float(back_weight), 0.)
         self.cross_sec = cross_sec
-        self.near_clip = near_clip = max(float(near_clip), 0.)
-        self.far_clip = far_clip = max(float(far_clip), near_clip)
-        self.radius_min = radius_min = max(float(radius_min), 0.)
-        self.radius_max = radius_max = max(float(radius_max), radius_min)
+        self.near_clip = max(float(near_clip), 0.)
+        self.far_clip = max(float(far_clip), self.near_clip)
+        self.radius_min = max(float(radius_min), 0.)
+        self.radius_max = max(float(radius_max), self.radius_min)
+        self.init_custom(back_weight)
+    
+    def init_custom(self, back_weight):
+        self.data = zeros(
+            (self.height, self.width, self.fields + 2), self.dtype)
+        self.back_weight = max(float(back_weight), 0.)
     
     def image(self):
         return (
@@ -129,6 +133,14 @@ class board(object):
             cloud[i::n_jobs], *args, **kwargs
         ) for i in range(n_jobs)):
             self.merge(board_temp.data)
+    
+    def batch_proj(self, n_jobs, cloud, *args, **kwargs):
+        n_jobs = max(int(n_jobs), 1)
+        b = len(cloud) // n_jobs + 1
+        for board_temp in Parallel(n_jobs)(delayed(self.temp_proj)(
+            cloud[b*i:b*(i+1)], *args, **kwargs
+        ) for i in range(n_jobs)):
+            self.merge(board_temp.data)
 
 class board_near(board):
     
@@ -148,8 +160,12 @@ class board_near(board):
 class log2board(board):
     
     def __init__(self, back_weight=-float_info.max, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.data[:] = float('-inf')
+        super().__init__(*args, back_weight=back_weight, **kwargs)
+    
+    def init_custom(self, back_weight):
+        self.data = full(
+            (self.height, self.width, self.fields + 2),
+            float('-inf'), self.dtype)
         self.back_weight = float(back_weight)
     
     def image(self):
