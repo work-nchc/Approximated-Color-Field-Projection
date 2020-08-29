@@ -7,8 +7,6 @@ seterr(divide='ignore', invalid='ignore')
 
 _width = 1920
 _height = 1080
-exponent_decay = -15
-depth = 0.05
 color_max = 255.9
 color_type = 'uint8'
 
@@ -31,23 +29,21 @@ class board(object):
         self, width=_width, height=_height, fields=3, dtype=float,
         back_weight=float_info.min, cross_sec=_cross_sec, near_clip=1.,
         far_clip=float('inf'), radius_min=0.8, radius_max=float('inf'),
-        *args, **kwargs
+        exponent_decay=-15., *args, **kwargs
     ):
         self.width = max(int(width), 1)
         self.height = max(int(height), 1)
         self.fields = max(int(fields), 0)
         self.dtype = dtype
+        self.data = zeros(
+            (self.height, self.width, self.fields + 2), self.dtype)
+        self.back_weight = max(float(back_weight), 0.)
         self.cross_sec = cross_sec
         self.near_clip = max(float(near_clip), 0.)
         self.far_clip = max(float(far_clip), self.near_clip)
         self.radius_min = max(float(radius_min), 0.)
         self.radius_max = max(float(radius_max), self.radius_min)
-        self.init_custom(back_weight)
-    
-    def init_custom(self, back_weight):
-        self.data = zeros(
-            (self.height, self.width, self.fields + 2), self.dtype)
-        self.back_weight = max(float(back_weight), 0.)
+        self.exponent_decay = float(exponent_decay)
     
     def image(self):
         return (
@@ -59,7 +55,7 @@ class board(object):
     def __bytes__(self):
         return self.image().tobytes()
     
-    def depth(self):
+    def depth_image(self):
         data_depth = zeros((self.height, self.width, self.fields), color_type)
         data_depth[:, :] = (
             self.data[:, :, self.fields:self.fields+1] /
@@ -96,7 +92,7 @@ class board(object):
     def draw(self, x0, y0, dist, color, alpha, size_pt):
         dist = min(max(dist, self.near_clip), self.far_clip)
         radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
-        decay = alpha * dist ** exponent_decay
+        decay = alpha * dist ** self.exponent_decay
         x0i = int(x0)
         y0i = int(y0)
         x0 -= 0.5
@@ -159,14 +155,26 @@ class board_near(board):
 
 class log2board(board):
     
-    def __init__(self, back_weight=-float_info.max, *args, **kwargs):
-        super().__init__(*args, back_weight=back_weight, **kwargs)
-    
-    def init_custom(self, back_weight):
+    def __init__(
+        self, width=_width, height=_height, fields=3, dtype=float,
+        back_weight=-float_info.max, cross_sec=_cross_sec, near_clip=1.,
+        far_clip=float('inf'), radius_min=0.8, radius_max=float('inf'),
+        depth=0.05, *args, **kwargs
+    ):
+        self.width = max(int(width), 1)
+        self.height = max(int(height), 1)
+        self.fields = max(int(fields), 0)
+        self.dtype = dtype
         self.data = full(
             (self.height, self.width, self.fields + 2),
             float('-inf'), self.dtype)
         self.back_weight = float(back_weight)
+        self.cross_sec = cross_sec
+        self.near_clip = max(float(near_clip), 0.)
+        self.far_clip = max(float(far_clip), self.near_clip)
+        self.radius_min = max(float(radius_min), 0.)
+        self.radius_max = max(float(radius_max), self.radius_min)
+        self.depth = float(depth)
     
     def image(self):
         return (2 ** (
@@ -174,7 +182,7 @@ class log2board(board):
             fmax(self.data[:, :, -1:], self.back_weight)
         ) * color_max).astype(color_type)
     
-    def depth(self):
+    def depth_image(self):
         data_depth = zeros((self.height, self.width, self.fields), color_type)
         data_depth[:, :] = (2 ** (
             self.data[:, :, self.fields:self.fields+1] -
@@ -199,7 +207,7 @@ class log2board(board):
     def draw(self, x0, y0, dist, color, alpha, size_pt):
         dist = min(max(dist, self.near_clip), self.far_clip)
         radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
-        decay = log2(alpha) - dist / depth
+        decay = log2(alpha) - dist / self.depth
         dist = log2(dist)
         color = log2(color)
         x0i = int(x0)
@@ -210,3 +218,82 @@ class log2board(board):
         self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, dist, color, decay)
         self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, dist, color, decay)
         self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, dist, color, decay)
+
+class tri_board(board):
+    
+    def __init__(
+        self, width=_width, height=_height, fields=3, dtype=float,
+        back_weight=float_info.min, cross_sec=_cross_sec, near_clip=0.,
+        far_clip=float('inf'), radius_min=0.8, radius_max=5.4,
+        depth=0.05, *args, **kwargs
+    ):
+        self.width = max(int(width), 1)
+        self.height = max(int(height), 1)
+        self.fields = max(int(fields), 0)
+        self.dtype = dtype
+        self.data = zeros(
+            (self.height, self.width, 3, self.fields + 2), self.dtype)
+        self.back_weight = max(float(back_weight), 0.)
+        self.cross_sec = cross_sec
+        self.near_clip = max(float(near_clip), 0.)
+        self.far_clip = max(float(far_clip), self.near_clip)
+        self.radius_min = max(float(radius_min), 0.)
+        self.radius_max = max(float(radius_max), self.radius_min)
+        self.depth = float(depth)
+    
+    def image(self):
+    
+    def depth_image(self):
+    
+    def merge(self, value):
+    
+    def draw_pix(self, x, y, r, dist, color, *args, **kwargs):
+        weight = self.cross_sec(r)
+        if not self.data[y, x, 0, self.fields]:
+            self.data[y, x, 0, :self.fields] = color
+            self.data[y, x, 0, self.fields] = dist
+            self.data[y, x, 0, -1] = weight
+        elif self.data[y, x, 0, self.fields] > dist:
+            self.data[y, x, 1:, :] = self.data[y, x, :2, :]
+            self.data[y, x, 0, :self.fields] = color
+            self.data[y, x, 0, self.fields] = dist
+            self.data[y, x, 0, -1] = weight
+        elif not self.data[y, x, 1, self.fields]:
+            self.data[y, x, 1, :self.fields] = color
+            self.data[y, x, 1, self.fields] = dist
+            self.data[y, x, 1, -1] = weight
+        elif self.data[y, x, 1, self.fields] > dist:
+            self.data[y, x, 2, :] = self.data[y, x, 1, :]
+            self.data[y, x, 1, :self.fields] = color
+            self.data[y, x, 1, self.fields] = dist
+            self.data[y, x, 1, -1] = weight
+        elif (
+            self.data[y, x, 2, self.fields] > dist or
+            not self.data[y, x, 2, self.fields]
+        ):
+            self.data[y, x, 2, :self.fields] = color
+            self.data[y, x, 2, self.fields] = dist
+            self.data[y, x, 2, -1] = weight
+    
+    def draw(self, x0, y0, dist, color, size_pt):
+        dist = min(max(dist, self.near_clip), self.far_clip)
+        radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
+        x0i = int(x0)
+        y0i = int(y0)
+        x0 -= 0.5
+        y0 -= 0.5
+        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, dist, color)
+        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, dist, color)
+        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, dist, color)
+        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, dist, color)
+    
+    def proj_pt(self, pt, center, rotation, camera, size_pt):
+        v_cam = rotation @ (pt[:3] - center)
+        if 0. < v_cam[2]:
+            v = camera @ v_cam
+            x0 = v[0] / v[2]
+            y0 = v[1] / v[2]
+            if 0. <= x0 < self.width and 0. <= y0 < self.height:
+                self.draw(
+                    x0, y0, (v_cam @ v_cam) ** 0.5, pt[3:self.fields+3],
+                    size_pt)
