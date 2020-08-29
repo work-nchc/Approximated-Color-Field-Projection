@@ -1,4 +1,5 @@
 from numpy import zeros, full, array, concatenate, log2, seterr, fmax, where
+from numpy import take_along_axis
 from scipy.spatial.transform import Rotation
 from sys import float_info
 from joblib import Parallel, delayed
@@ -29,7 +30,7 @@ class board(object):
         self, width=_width, height=_height, fields=3, dtype=float,
         back_weight=float_info.min, cross_sec=_cross_sec, near_clip=1.,
         far_clip=float('inf'), radius_min=0.8, radius_max=float('inf'),
-        exponent_decay=-15., *args, **kwargs
+        exponent_decay=15., *args, **kwargs
     ):
         self.width = max(int(width), 1)
         self.height = max(int(height), 1)
@@ -70,10 +71,10 @@ class board(object):
     def merge(self, value):
         self.data += value
     
-    def draw_pix(self, x, y, r, dist, color, decay, *args, **kwargs):
+    def draw_pix(self, x, y, r, reci, color, decay, *args, **kwargs):
         weight = self.cross_sec(r) * decay
         self.data[y, x, :self.fields] += color * weight
-        self.data[y, x, self.fields] += 1. / dist * weight
+        self.data[y, x, self.fields] += reci * weight
         self.data[y, x, -1] += weight
     
     def draw_quad(self, xi, yi, dx, dy, x0, y0, radius, *args, **kwargs):
@@ -90,17 +91,17 @@ class board(object):
             r = ((x - x0) ** 2 + (y - y0) ** 2) ** 0.5
     
     def draw(self, x0, y0, dist, color, alpha, size_pt):
-        dist = min(max(dist, self.near_clip), self.far_clip)
-        radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
-        decay = alpha * dist ** self.exponent_decay
+        reci = 1. / min(max(dist, self.near_clip), self.far_clip)
+        radius = min(max(size_pt * reci, self.radius_min), self.radius_max)
+        decay = alpha * reci ** self.exponent_decay
         x0i = int(x0)
         y0i = int(y0)
         x0 -= 0.5
         y0 -= 0.5
-        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, dist, color, decay)
+        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, reci, color, decay)
     
     def proj_pt(self, pt, center, rotation, camera, size_pt):
         v_cam = rotation @ (pt[:3] - center)
@@ -147,10 +148,10 @@ class board_near(board):
             self.data, value
         )
     
-    def draw_pix(self, x, y, r, dist, color, *args, **kwargs):
-        if self.data[y, x, self.fields] < 1. / dist:
+    def draw_pix(self, x, y, r, reci, color, *args, **kwargs):
+        if self.data[y, x, self.fields] < reci:
             self.data[y, x, :self.fields] = color
-            self.data[y, x, self.fields] = 1. / dist
+            self.data[y, x, self.fields] = reci
             self.data[y, x, -1] = 1.
 
 class log2board(board):
@@ -196,28 +197,28 @@ class log2board(board):
     def merge(self, value):
         self.data[:] = log2sum(self.data, value)
     
-    def draw_pix(self, x, y, r, dist, color, decay, *args, **kwargs):
+    def draw_pix(self, x, y, r, reci, color, decay, *args, **kwargs):
         weight = log2(self.cross_sec(r)) + decay
         self.data[y, x, :self.fields] = log2sum(
             self.data[y, x, :self.fields], weight + color)
         self.data[y, x, self.fields] = log2sum(
-            self.data[y, x, self.fields], weight - dist)
+            self.data[y, x, self.fields], weight + reci)
         self.data[y, x, -1] = log2sum(self.data[y, x, -1], weight)
     
     def draw(self, x0, y0, dist, color, alpha, size_pt):
         dist = min(max(dist, self.near_clip), self.far_clip)
         radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
         decay = log2(alpha) - dist / self.depth
-        dist = log2(dist)
+        reci = -log2(dist)
         color = log2(color)
         x0i = int(x0)
         y0i = int(y0)
         x0 -= 0.5
         y0 -= 0.5
-        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, dist, color, decay)
-        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, dist, color, decay)
+        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, reci, color, decay)
+        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, reci, color, decay)
 
 class tri_board(board):
     
@@ -246,46 +247,42 @@ class tri_board(board):
     def depth_image(self):
     
     def merge(self, value):
+        data_hex = concatenate((self.data, value), 2)
+        self.data[:] = take_along_axis(
+            data_hex,
+            data_hex[
+                :, :, :, self.fields:self.fields+1
+            ].argsort(2)[:, :, :-4:-1],
+            2)
     
-    def draw_pix(self, x, y, r, dist, color, *args, **kwargs):
+    def draw_pix(self, x, y, r, reci, color, *args, **kwargs):
         weight = self.cross_sec(r)
-        if not self.data[y, x, 0, self.fields]:
-            self.data[y, x, 0, :self.fields] = color
-            self.data[y, x, 0, self.fields] = dist
-            self.data[y, x, 0, -1] = weight
-        elif self.data[y, x, 0, self.fields] > dist:
+        if self.data[y, x, 0, self.fields] < reci:
             self.data[y, x, 1:, :] = self.data[y, x, :2, :]
             self.data[y, x, 0, :self.fields] = color
-            self.data[y, x, 0, self.fields] = dist
+            self.data[y, x, 0, self.fields] = reci
             self.data[y, x, 0, -1] = weight
-        elif not self.data[y, x, 1, self.fields]:
-            self.data[y, x, 1, :self.fields] = color
-            self.data[y, x, 1, self.fields] = dist
-            self.data[y, x, 1, -1] = weight
-        elif self.data[y, x, 1, self.fields] > dist:
+        elif self.data[y, x, 1, self.fields] < reci:
             self.data[y, x, 2, :] = self.data[y, x, 1, :]
             self.data[y, x, 1, :self.fields] = color
-            self.data[y, x, 1, self.fields] = dist
+            self.data[y, x, 1, self.fields] = reci
             self.data[y, x, 1, -1] = weight
-        elif (
-            self.data[y, x, 2, self.fields] > dist or
-            not self.data[y, x, 2, self.fields]
-        ):
+        elif self.data[y, x, 2, self.fields] < reci:
             self.data[y, x, 2, :self.fields] = color
-            self.data[y, x, 2, self.fields] = dist
+            self.data[y, x, 2, self.fields] = reci
             self.data[y, x, 2, -1] = weight
     
     def draw(self, x0, y0, dist, color, size_pt):
-        dist = min(max(dist, self.near_clip), self.far_clip)
-        radius = min(max(size_pt / dist, self.radius_min), self.radius_max)
+        reci = 1. / min(max(dist, self.near_clip), self.far_clip)
+        radius = min(max(size_pt * reci, self.radius_min), self.radius_max)
         x0i = int(x0)
         y0i = int(y0)
         x0 -= 0.5
         y0 -= 0.5
-        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, dist, color)
-        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, dist, color)
-        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, dist, color)
-        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, dist, color)
+        self.draw_quad(x0i, y0i, 1, 1, x0, y0, radius, reci, color)
+        self.draw_quad(x0i, y0i-1, 1, -1, x0, y0, radius, reci, color)
+        self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, reci, color)
+        self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, reci, color)
     
     def proj_pt(self, pt, center, rotation, camera, size_pt):
         v_cam = rotation @ (pt[:3] - center)
