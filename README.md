@@ -1,2 +1,2 @@
-# Normalized-Color-Field-Projection
-Normalized Color Field Projection
+# Approximated-Color-Field-Projection
+Approximated Color Field Projection
