@@ -230,10 +230,11 @@ class multi_board(board):
     def ssor(self, depth=None):
         if None is depth:
             depth = self.depth
-        dist = 1. / -self.data[:, :, :, self.fields:self.fields+1]
+        dist = 1. / (
+            self.data[:, :, :, self.fields:self.fields+1] - float_info.min)
         dist[:, :, self.center] = where(
             self.data[:, :, self.center, self.fields:self.fields+1],
-            dist[:, :, self.center], dist.min(2)
+            dist[:, :, self.center], dist.max(2)
         )
         weight = array(self.data[:, :, :, -1:])
         weight[:] = where(
