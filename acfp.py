@@ -139,21 +139,6 @@ class board(object):
         ) for i in range(n_jobs)):
             self.merge(board_temp.data)
 
-class board_near(board):
-    
-    def merge(self, value):
-        self.data[:] = where(
-            self.data[:, :, self.fields:self.fields+1] >=
-            value[:, :, self.fields:self.fields+1],
-            self.data, value
-        )
-    
-    def draw_pix(self, x, y, r, reci, color, *args, **kwargs):
-        if self.data[y, x, self.fields] < reci:
-            self.data[y, x, :self.fields] = color
-            self.data[y, x, self.fields] = reci
-            self.data[y, x, -1] = 1.
-
 class log2board(board):
     
     def __init__(
@@ -220,37 +205,40 @@ class log2board(board):
         self.draw_quad(x0i-1, y0i, -1, 1, x0, y0, radius, reci, color, decay)
         self.draw_quad(x0i-1, y0i-1, -1, -1, x0, y0, radius, reci, color, decay)
 
-class tri_board(board):
+class multi_board(board):
     
     def __init__(
-        self, width=_width, height=_height, fields=3, dtype=float,
+        self, width=_width, height=_height, layers=5, fields=3, dtype=float,
         back_weight=float_info.min, cross_sec=_cross_sec, radius_min=0.8,
-        radius_max=5.4, depth=0.05, *args, **kwargs
+        radius_max=5.4, depth=0.05, center=2, *args, **kwargs
     ):
         self.width = max(int(width), 1)
         self.height = max(int(height), 1)
+        self.layers = max(int(layers), 1)
         self.fields = max(int(fields), 0)
         self.dtype = dtype
-        self.data = zeros(
-            (self.height, self.width, 3, self.fields + 2), self.dtype)
+        self.data = zeros((
+            self.height, self.width, self.layers, self.fields + 2
+        ), self.dtype)
         self.back_weight = max(float(back_weight), 0.)
         self.cross_sec = cross_sec
         self.radius_min = max(float(radius_min), 0.)
         self.radius_max = max(float(radius_max), self.radius_min)
         self.depth = float(depth)
+        self.center = min(max(int(center), 0), self.layers - 1)
     
     def ssor(self, depth=None):
         if None is depth:
             depth = self.depth
-        dist = 1. / self.data[:, :, :, self.fields:self.fields+1]
-        dist[:, :, 1, :] = where(
-            self.data[:, :, 1, self.fields:self.fields+1],
-            dist[:, :, 1, :], dist[:, :, 0, :]
+        dist = 1. / -self.data[:, :, :, self.fields:self.fields+1]
+        dist[:, :, self.center] = where(
+            self.data[:, :, self.center, self.fields:self.fields+1],
+            dist[:, :, self.center], dist.min(2)
         )
         weight = array(self.data[:, :, :, -1:])
-        weight[:, :, ::2, :] = where(
-            dist[:, :, 1:, :] - dist[:, :, :2, :] > depth,
-            0., weight[:, :, ::2, :]
+        weight[:] = where(
+            abs(dist - dist[:, :, self.center:self.center+1]) > depth,
+            0., weight
         )
         return weight
     
@@ -263,11 +251,14 @@ class tri_board(board):
             color_max
         ).astype(color_type)
     
+    def __bytes__(self):
+        return self.image(self.ssor()).tobytes()
+    
     def depth_image(self, weight=None):
         if None is weight:
             weight = self.data[:, :, :, -1:]
         data_depth = zeros((self.height, self.width, self.fields), color_type)
-        data_depth[:, :] = (
+        data_depth[:] = (
             (self.data[:, :, :, self.fields:self.fields+1] * weight).sum(2) /
             fmax(weight.sum(2), self.back_weight) *
             color_max
@@ -275,30 +266,22 @@ class tri_board(board):
         return data_depth
     
     def merge(self, value):
-        data_6layers = concatenate((self.data, value), 2)
+        data_double = concatenate((self.data, value), 2)
         self.data[:] = take_along_axis(
-            data_6layers,
-            data_6layers[
+            data_double,
+            data_double[
                 :, :, :, self.fields:self.fields+1
-            ].argsort(2)[:, :, :-4:-1],
+            ].argsort(2)[:, :, :-self.layers-1:-1],
             2)
     
     def draw_pix(self, x, y, r, reci, color, *args, **kwargs):
         weight = self.cross_sec(r)
-        if self.data[y, x, 0, self.fields] < reci:
-            self.data[y, x, 1:, :] = self.data[y, x, :2, :]
-            self.data[y, x, 0, :self.fields] = color
-            self.data[y, x, 0, self.fields] = reci
-            self.data[y, x, 0, -1] = weight
-        elif self.data[y, x, 1, self.fields] < reci:
-            self.data[y, x, 2, :] = self.data[y, x, 1, :]
-            self.data[y, x, 1, :self.fields] = color
-            self.data[y, x, 1, self.fields] = reci
-            self.data[y, x, 1, -1] = weight
-        elif self.data[y, x, 2, self.fields] < reci:
-            self.data[y, x, 2, :self.fields] = color
-            self.data[y, x, 2, self.fields] = reci
-            self.data[y, x, 2, -1] = weight
+        if self.data[y, x, -1, self.fields] < reci:
+            self.data[y, x, -1, :self.fields] = color
+            self.data[y, x, -1, self.fields] = reci
+            self.data[y, x, -1, -1] = weight
+            self.data[y, x] = self.data[y, x][
+                self.data[y, x][:, self.fields].argsort()[::-1]]
     
     def draw(self, x0, y0, dist, color, size_pt):
         reci = 1. / dist
