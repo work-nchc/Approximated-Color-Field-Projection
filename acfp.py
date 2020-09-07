@@ -1,5 +1,5 @@
 from numpy import zeros, full, array, concatenate, log2, seterr, fmax, where
-from numpy import take_along_axis
+from numpy import take_along_axis, arctan2, pi
 from scipy.spatial.transform import Rotation
 from sys import float_info
 from joblib import Parallel, delayed
@@ -10,6 +10,7 @@ _width = 1920
 _height = 1080
 color_max = 255.9
 color_type = 'uint8'
+lddv = 0.25
 
 #_cross_sec = lambda r: (2. * r - 3.) * r ** 2 + 1.
 _cross_sec = lambda r: 1. - r
@@ -56,14 +57,43 @@ class board(object):
     def __bytes__(self):
         return self.image().tobytes()
     
-    def depth_image(self):
-        data_depth = zeros((self.height, self.width, self.fields), color_type)
-        data_depth[:, :] = (
+    def wbuffer(self):
+        return (
             self.data[:, :, self.fields:self.fields+1] /
-            fmax(self.data[:, :, -1:], self.back_weight) *
-            color_max
+            fmax(self.data[:, :, -1:], self.back_weight)
         )
-        return data_depth
+    
+    def mono_image(self, field=None):
+        if None is field:
+            field = self.wbuffer()
+        data_mono = zeros((*field.shape[:2], self.fields), color_type)
+        data_mono[:] = field * color_max
+        return data_mono
+    
+    def light(self, pix_m=_width/lddv/2.):
+        dist = pix_m / self.wbuffer()
+        return ((
+            (dist[2:, 1:-1] - dist[:-2, 1:-1]) ** 2 +
+            (dist[1:-1, 2:] - dist[1:-1, :-2]) ** 2
+        ) / 4. + 1.) ** -0.5
+    
+    def ssao(self, pix_m=_width/lddv/2.):
+        dist = pix_m / self.wbuffer()
+        return (
+            arctan2(1., dist[2:, 1:-1] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[:-2, 1:-1] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[1:-1, 2:] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[1:-1, :-2] - dist[1:-1, 1:-1])
+        ) / pi / 4.
+    
+    def edl(self, pix_m=_width/lddv/2.):
+        dist = pix_m / self.wbuffer()
+        return (
+            arctan2(1., fmax(dist[2:, 1:-1] - dist[1:-1, 1:-1], 0.)) +
+            arctan2(1., fmax(dist[:-2, 1:-1] - dist[1:-1, 1:-1], 0.)) +
+            arctan2(1., fmax(dist[1:-1, 2:] - dist[1:-1, 1:-1], 0.)) +
+            arctan2(1., fmax(dist[1:-1, :-2] - dist[1:-1, 1:-1], 0.))
+        ) / pi / 2.
     
     def clear(self):
         self.data[:] = 0.
@@ -168,13 +198,11 @@ class log2board(board):
             fmax(self.data[:, :, -1:], self.back_weight)
         ) * color_max).astype(color_type)
     
-    def depth_image(self):
-        data_depth = zeros((self.height, self.width, self.fields), color_type)
-        data_depth[:, :] = (2 ** (
+    def wbuffer(self):
+        return 2 ** (
             self.data[:, :, self.fields:self.fields+1] -
             fmax(self.data[:, :, -1:], self.back_weight)
-        ) * color_max)
-        return data_depth
+        )
     
     def clear(self):
         self.data[:] = float('-inf')
@@ -245,26 +273,20 @@ class multi_board(board):
     
     def image(self, weight=None):
         if None is weight:
-            weight = self.data[:, :, :, -1:]
+            weight = self.ssor()
         return (
             (self.data[:, :, :, :self.fields] * weight).sum(2) /
             fmax(weight.sum(2), self.back_weight) *
             color_max
         ).astype(color_type)
     
-    def __bytes__(self):
-        return self.image(self.ssor()).tobytes()
-    
-    def depth_image(self, weight=None):
+    def wbuffer(self, weight=None):
         if None is weight:
-            weight = self.data[:, :, :, -1:]
-        data_depth = zeros((self.height, self.width, self.fields), color_type)
-        data_depth[:] = (
+            weight = self.ssor()
+        return (
             (self.data[:, :, :, self.fields:self.fields+1] * weight).sum(2) /
-            fmax(weight.sum(2), self.back_weight) *
-            color_max
+            fmax(weight.sum(2), self.back_weight)
         )
-        return data_depth
     
     def merge(self, value):
         data_double = concatenate((self.data, value), 2)
