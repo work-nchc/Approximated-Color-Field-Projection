@@ -328,3 +328,84 @@ class multi_board(board):
                 self.draw(
                     x0, y0, (v_cam @ v_cam) ** 0.5, pt[3:self.fields+3],
                     size_pt)
+
+class fast_board(board):
+    
+    def draw_pix(self, x, y, weight, reci, color):
+        self.data[y, x, :self.fields] += color * weight
+        self.data[y, x, self.fields] += reci * weight
+        self.data[y, x, -1] += weight
+    
+    def draw(self, x0, y0, dist, color, alpha, size_pt):
+        reci = 1. / min(max(dist, self.near_clip), self.far_clip)
+        radius = int(
+            min(max(size_pt * reci, self.radius_min), self.radius_max)) + 1
+        decay = alpha * reci ** self.exponent_decay
+        x0i = int(x0)
+        y0i = int(y0)
+        {
+            self.draw_pix(
+                x0i + dx, y0i + dy,
+                decay * (radius - abs(dx) - abs(dy)) / radius, reci, color
+            )
+            for dy in range(1 - radius, radius)
+            if 0 <= y0i + dy < self.height
+            for dx in range(1 - radius + abs(dy), radius - abs(dy))
+            if 0 <= x0i + dx < self.width
+        }
+
+class fast_log2board(log2board):
+    
+    def draw_pix(self, x, y, weight, reci, color):
+        self.data[y, x, :self.fields] = log2sum(
+            self.data[y, x, :self.fields], weight + color)
+        self.data[y, x, self.fields] = log2sum(
+            self.data[y, x, self.fields], weight + reci)
+        self.data[y, x, -1] = log2sum(self.data[y, x, -1], weight)
+    
+    def draw(self, x0, y0, dist, color, alpha, size_pt):
+        dist = min(max(dist, self.near_clip), self.far_clip)
+        radius = int(
+            min(max(size_pt / dist, self.radius_min), self.radius_max)) + 1
+        decay = log2(alpha) - dist / self.depth
+        reci = -log2(dist)
+        color = log2(color)
+        x0i = int(x0)
+        y0i = int(y0)
+        {
+            self.draw_pix(
+                x0i + dx, y0i + dy,
+                decay + log2((radius - abs(dx) - abs(dy)) / radius), reci, color
+            )
+            for dy in range(1 - radius, radius)
+            if 0 <= y0i + dy < self.height
+            for dx in range(1 - radius + abs(dy), radius - abs(dy))
+            if 0 <= x0i + dx < self.width
+        }
+
+class fast_multi_board(multi_board):
+    
+    def draw_pix(self, x, y, weight, reci, color):
+        if self.data[y, x, -1, self.fields] < reci:
+            self.data[y, x, -1, :self.fields] = color
+            self.data[y, x, -1, self.fields] = reci
+            self.data[y, x, -1, -1] = weight
+            self.data[y, x] = self.data[y, x][
+                self.data[y, x][:, self.fields].argsort()[::-1]]
+    
+    def draw(self, x0, y0, dist, color, size_pt):
+        reci = 1. / dist
+        radius = int(
+            min(max(size_pt * reci, self.radius_min), self.radius_max)) + 1
+        x0i = int(x0)
+        y0i = int(y0)
+        {
+            self.draw_pix(
+                x0i + dx, y0i + dy,
+                (radius - abs(dx) - abs(dy)) / radius, reci, color
+            )
+            for dy in range(1 - radius, radius)
+            if 0 <= y0i + dy < self.height
+            for dx in range(1 - radius + abs(dy), radius - abs(dy))
+            if 0 <= x0i + dx < self.width
+        }
