@@ -70,14 +70,23 @@ class board(object):
         data_mono[:] = field * color_max
         return data_mono
     
-    def light(self, pix_m=_width/lddv/2.):
+    def light(self, pix_m=_width/lddv/32.):
         dist = pix_m / self.wbuffer()
         return ((
             (dist[2:, 1:-1] - dist[:-2, 1:-1]) ** 2 +
             (dist[1:-1, 2:] - dist[1:-1, :-2]) ** 2
         ) / 4. + 1.) ** -0.5
     
-    def ssao(self, pix_m=_width/lddv/2.):
+    def bound(self, pix_m=_width/lddv/32.):
+        dist = pix_m / self.wbuffer()
+        return abs((
+            arctan2(1., dist[2:, 1:-1] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[:-2, 1:-1] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[1:-1, 2:] - dist[1:-1, 1:-1]) +
+            arctan2(1., dist[1:-1, :-2] - dist[1:-1, 1:-1])
+        ) / pi / 2. - 1.)
+    
+    def ssao(self, pix_m=_width/lddv/32.):
         dist = pix_m / self.wbuffer()
         return (
             arctan2(1., dist[2:, 1:-1] - dist[1:-1, 1:-1]) +
@@ -86,7 +95,7 @@ class board(object):
             arctan2(1., dist[1:-1, :-2] - dist[1:-1, 1:-1])
         ) / pi / 4.
     
-    def edl(self, pix_m=_width/lddv/2.):
+    def edl(self, pix_m=_width/lddv/32.):
         dist = pix_m / self.wbuffer()
         return (
             arctan2(1., fmax(dist[2:, 1:-1] - dist[1:-1, 1:-1], 0.)) +
