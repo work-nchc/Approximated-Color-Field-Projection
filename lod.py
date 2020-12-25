@@ -1,4 +1,4 @@
-from numpy import concatenate, array, lexsort, zeros
+from numpy import concatenate, array, lexsort, zeros, log2
 from joblib import Parallel, delayed
 
 __all__ = [
@@ -36,7 +36,7 @@ class sorted_cloud(object):
     def extend(self, cloud):
         self.data = concatenate((
             self.data,
-            concatenate((cloud[:, :self.space].astype(int_numpy), cloud), 1),
+            concatenate((cloud[:, :self.space] // 1., cloud), 1),
         ))
         self.data = self.data[lexsort([
             self.data[:, i] for i in range(self.space)])]
@@ -141,3 +141,12 @@ def voxel_grid(cloud, leaf, space=None, dtype=None):
 
 def mip_cloud(cloud, feature=None, space=None, n_jobs=1, fineness=None):
     return mip_grid(sorted_cloud(cloud, feature, space), n_jobs, fineness)
+
+def cloud_mip(mip, center, f):
+    cloud = zeros((0, mip.space + mip.feature))
+    for index in mip:
+        level = min(max(
+            -int(log2((index + array((0.5, 0.5, 0.5)) - center) / f) // 1.),
+            0), mip.fineness - 1)
+        cloud.concatenate(cloud, mip[index, level])
+    return cloud
